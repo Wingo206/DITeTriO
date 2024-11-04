@@ -1,5 +1,7 @@
 import numpy as np
+import pandas as pd
 import pygame
+import time
 
 class TetrisVisualizer:
     # Previous constants and piece definitions remain unchanged...
@@ -67,10 +69,11 @@ class TetrisVisualizer:
         self.BOARD_WIDTH = 10
         self.BOARD_HEIGHT = 20
         self.PREVIEW_SIZE = 4
+        self.MARGIN_CELLS = 4
         
         # Calculate window dimensions (added extra width for input display)
-        self.window_width = (self.BOARD_WIDTH + 15) * self.CELL_SIZE  # Increased for input display
-        self.window_height = self.BOARD_HEIGHT * self.CELL_SIZE
+        self.window_width = (self.BOARD_WIDTH + 2 * self.MARGIN_CELLS + 10) * self.CELL_SIZE  # Increased for input display
+        self.window_height = (self.BOARD_HEIGHT + 2 * self.MARGIN_CELLS) * self.CELL_SIZE
         
         # Initialize pygame window
         self.screen = pygame.display.set_mode((self.window_width, self.window_height))
@@ -117,8 +120,8 @@ class TetrisVisualizer:
     def draw_input_display(self):
         """Draw the input state display"""
         # Starting position for input display
-        start_x = (self.BOARD_WIDTH + 6) * self.CELL_SIZE
-        start_y = 2 * self.CELL_SIZE
+        start_x = (self.MARGIN_CELLS + self.BOARD_WIDTH + 6) * self.CELL_SIZE
+        start_y = self.MARGIN_CELLS + 2 * self.CELL_SIZE
         box_size = self.CELL_SIZE * 1.5
         spacing = self.CELL_SIZE * 0.2
         
@@ -173,13 +176,13 @@ class TetrisVisualizer:
 
     def draw_piece(self, piece_id, x, y, rotation, color):
         """Draw a tetris piece at the specified position"""
-        if piece_id < 0 or piece_id > 6:
+        if piece_id < 1 or piece_id > 7:
             return
             
         shape = self.SHAPES[piece_id][rotation]
         for block_x, block_y in shape:
-            pixel_x = (x + block_x) * self.CELL_SIZE
-            pixel_y = (y + block_y) * self.CELL_SIZE
+            pixel_x = (self.MARGIN_CELLS + x + block_x) * self.CELL_SIZE
+            pixel_y = (self.MARGIN_CELLS + y + block_y) * self.CELL_SIZE
             pygame.draw.rect(self.screen, color,
                            (pixel_x, pixel_y, self.CELL_SIZE-1, self.CELL_SIZE-1))
 
@@ -192,15 +195,19 @@ class TetrisVisualizer:
         for y in range(self.BOARD_HEIGHT):
             for x in range(self.BOARD_WIDTH):
                 pygame.draw.rect(self.screen, self.COLORS[int(self.board[y][x])],
-                                (x * self.CELL_SIZE, y * self.CELL_SIZE,
+                                ((self.MARGIN_CELLS + x) * self.CELL_SIZE, (self.MARGIN_CELLS + y) * self.CELL_SIZE,
                                 self.CELL_SIZE-1, self.CELL_SIZE-1))
         
         # Draw current piece
         if self.current_piece:
+            # account for center of piece, unless O piece
+            offset = 1
+            if self.current_piece['id'] == 4:
+                offset = 0
             self.draw_piece(
                 self.current_piece['id'],
-                self.current_piece['x'],
-                self.current_piece['y'],
+                self.current_piece['x'] - offset,
+                self.current_piece['y'] - 21,
                 self.current_piece['rotation'],
                 self.COLORS[self.current_piece['id']]
             )
@@ -229,24 +236,34 @@ class TetrisVisualizer:
         # Draw gridlines
         # vertical lines
         for col in range(0, 11):
-            pygame.draw.rect(self.screen, (255, 255, 255), (col * self.CELL_SIZE, 0, 1, 20 * self.CELL_SIZE))
+            pygame.draw.rect(self.screen, (255, 255, 255), ((self.MARGIN_CELLS + col) * self.CELL_SIZE, self.MARGIN_CELLS*self.CELL_SIZE, 1, 20 * self.CELL_SIZE))
 
         # horizontal lines
         for row in range(0, 21):
-            pygame.draw.rect(self.screen, (255, 255, 255), (0, row * self.CELL_SIZE, 10 * self.CELL_SIZE, 1))
+            pygame.draw.rect(self.screen, (255, 255, 255), (self.MARGIN_CELLS*self.CELL_SIZE, (self.MARGIN_CELLS + row) * self.CELL_SIZE, 10 * self.CELL_SIZE, 1))
         
         # Draw input display
         self.draw_input_display()
         
         pygame.display.flip()
 
-    def run(self, state_array):
+    def run(self, state_arrays):
         """Update and display the board with the given state"""
-        self.update_state(state_array)
-        self.draw_board()
+
+
         
         running = True
+        i = 0
         while running:
+            state_array = state_arrays[i]
+            i += 1
+            print("frame: " + str(i))
+
+            self.update_state(state_array)
+            self.draw_board()
+
+            # time.sleep(0.1)
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -258,31 +275,37 @@ class TetrisVisualizer:
 
 # Example usage
 if __name__ == "__main__":
-    # Create a sample state array (221 elements)
-    sample_state = np.zeros(221)
+    # # Create a sample state array (221 elements)
+    # sample_state = np.zeros(221)
 
-    # sample values in the board
-    sample_state[150:158] = 1
-    sample_state[158:166] = 3
-    sample_state[190:200] = 8
+    # # sample values in the board
+    # sample_state[150:158] = 1
+    # sample_state[158:166] = 3
+    # sample_state[190:200] = 8
     
-    # Set some example values
-    # Put an I piece (id=4) in the middle of the board
-    sample_state[200] = 1  # Current piece is I
-    sample_state[201] = 3  # x position
-    sample_state[202] = 10  # y position
-    sample_state[203] = 0  # rotation
+    # # Set some example values
+    # # Put an I piece (id=4) in the middle of the board
+    # sample_state[200] = 1  # Current piece is I
+    # sample_state[201] = 3  # x position
+    # sample_state[202] = 10  # y position
+    # sample_state[203] = 0  # rotation
     
-    # Set hold piece
-    sample_state[204] = 2  # O piece in hold
-    sample_state[205] = 1  # Can hold
+    # # Set hold piece
+    # sample_state[204] = 2  # O piece in hold
+    # sample_state[205] = 1  # Can hold
     
-    # Set next pieces
-    sample_state[206:211] = [2, 4, 6, 1, 7]  # Next 5 pieces
+    # # Set next pieces
+    # sample_state[206:211] = [2, 4, 6, 1, 7]  # Next 5 pieces
     
-    # Set some example input states
-    sample_state[212:220] = [1, 0, 1, 0, 0, 1, 0, 1]  # Some random input states
+    # # Set some example input states
+    # sample_state[212:220] = [1, 0, 1, 0, 0, 1, 0, 1]  # Some random input states
+
+
+    # Read list of states from a file
+    df = pd.read_csv("data/processed_replays/test2_0.csv", index_col=False)
+
+    states = df.to_numpy()
     
     # Create and run visualizer
     visualizer = TetrisVisualizer()
-    visualizer.run(sample_state)
+    visualizer.run(states)
