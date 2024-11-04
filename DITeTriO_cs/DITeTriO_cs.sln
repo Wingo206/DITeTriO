@@ -1,0 +1,42 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TetrLoader", "TetrLoader", "{8C13A003-FC4B-49FA-8803-2B757D6DF4AE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TetrLoader", "TetrLoader\TetrLoader\TetrLoader.csproj", "{32270DC9-4560-43C4-8AEF-FA83C7320D68}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TetrioVirtualEnvironment", "TetrioVirtualEnvironment", "{58084077-250F-4F0C-9EE5-AAD0B14C807D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TetrEnvironment", "TetrioVirtualEnvironment\TetrEnvironment\TetrEnvironment.csproj", "{F06E3C9F-E9D6-4086-BF33-3E6FBD7E16B6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DITeTriOPreProcessor", "DITeTriOPreProcessor\DITeTriOPreProcessor.csproj", "{6C3452BA-285D-4704-83FD-0E626E3ABAD8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{32270DC9-4560-43C4-8AEF-FA83C7320D68}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{32270DC9-4560-43C4-8AEF-FA83C7320D68}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{32270DC9-4560-43C4-8AEF-FA83C7320D68}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{32270DC9-4560-43C4-8AEF-FA83C7320D68}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F06E3C9F-E9D6-4086-BF33-3E6FBD7E16B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F06E3C9F-E9D6-4086-BF33-3E6FBD7E16B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F06E3C9F-E9D6-4086-BF33-3E6FBD7E16B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F06E3C9F-E9D6-4086-BF33-3E6FBD7E16B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C3452BA-285D-4704-83FD-0E626E3ABAD8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C3452BA-285D-4704-83FD-0E626E3ABAD8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C3452BA-285D-4704-83FD-0E626E3ABAD8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C3452BA-285D-4704-83FD-0E626E3ABAD8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{32270DC9-4560-43C4-8AEF-FA83C7320D68} = {8C13A003-FC4B-49FA-8803-2B757D6DF4AE}
+		{F06E3C9F-E9D6-4086-BF33-3E6FBD7E16B6} = {58084077-250F-4F0C-9EE5-AAD0B14C807D}
+	EndGlobalSection
+EndGlobal

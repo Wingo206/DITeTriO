@@ -1,0 +1,12 @@
+[submodule "cs/TetrioVirtualEnvironment"]
+	path = cs/TetrioVirtualEnvironment
+	url = https://github.com/CSDotNET0211/TetrioVirtualEnvironment.git
+[submodule "cs/TetrLoader"]
+	path = cs/TetrLoader
+	url = https://github.com/CSDotNET0211/TetrLoader.git
+[submodule "DITeTriO_cs/TetrioVirtualEnvironment"]
+	path = DITeTriO_cs/TetrioVirtualEnvironment
+	url = https://github.com/CSDotNET0211/TetrioVirtualEnvironment.git
+[submodule "DITeTriO_cs/TetrLoader"]
+	path = DITeTriO_cs/TetrLoader
+	url = https://github.com/CSDotNET0211/TetrLoader
