@@ -300,3 +300,8 @@ $RECYCLE.BIN/
 .DS_Store
 
 _NCrunch*
+
+
+# data
+/data/raw_replays/*
+/data/processed_replays/*
