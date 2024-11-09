@@ -19,12 +19,13 @@ string filepath = rawFilepath + filename + ".ttrm";
 StringBuilder header = new StringBuilder();
 for (int j = 0; j < 200; j++)
 {
-    header.Append("board_"+j+",");
+    header.Append("b_"+j+",");
 }
-header.Append("curr_piece, curr_piece_x, curr_piece_y, curr_piece_rot, ");
-header.Append("hold_piece, can_hold, ");
-header.Append("queue_0, queue_1, queue_2, queue_3, queue_4");
-header.Append(", dummy0, dummy1, dummy2, dummy3, dummy4, dummy5, dummy6, dummy7, dummy8, dummy9");
+header.Append("curr_piece,curr_piece_x,curr_piece_y,curr_piece_rot,");
+header.Append("hold_piece,can_hold,");
+header.Append("queue_0,queue_1,queue_2,queue_3,queue_4,");
+header.Append("last_moveleft,last_moveright,last_softdrop,last_rotate_cw,last_rotate_ccw,last_rotate_180,last_harddrop,last_hold,");
+header.Append("moveleft,moveright,softdrop,rotate_cw,rotate_ccw,rotate_180,harddrop,hold");
 
 string headerString = header.ToString();
 using (StreamReader reader = new StreamReader(filepath))
@@ -50,9 +51,13 @@ using (StreamReader reader = new StreamReader(filepath))
 
             // load the replay
             replay.LoadGame(i);
+            bool[] lastInputs = new bool[8];
+            int[] framesSinceChange = new int[8];
             while (true)
             {
                 LogBoard(replay.Environments, writer);
+                LogInputs(replay.Environments, writer, lastInputs, framesSinceChange);
+
                 if (!replay.NextFrame())
                 {
                     break;
@@ -104,15 +109,45 @@ void LogBoard(List<Environment> environments, StreamWriter writer)
             row.Append(encodeMinotype(m) + ",");
         }
 
-        // frames since input change
-        // TODO
-
-        // inputs
-        row.Append("0,0,0,0,0,0,0,0,0,0");
-
-        writer.WriteLine(row.ToString());
+        // write to the csv
+        writer.Write(row.ToString());
     }
+}
 
+void LogInputs(List<Environment> environments, StreamWriter writer, bool[] lastInputs, int[] framesSinceChange)
+{
+    for (int playerIndex = 0; playerIndex < 1; playerIndex++)
+    {
+        Environment env = environments[playerIndex];
+
+        // inputs - loop through and update values
+        string curInputsString = "";
+        string framesSinceChangeString = "";
+        for (int i = 0; i < 8; i++) 
+        {
+            curInputsString += env.PressingKeys[i] ? 1:0;
+            if (i != 7) 
+            {
+                curInputsString += ",";
+            }
+
+            // update the frames since change
+            if (env.PressingKeys[i] != lastInputs[i])
+            {
+                // this key has changed
+                framesSinceChange[i] = 0;
+            } else {
+                // key is the same
+                framesSinceChange[i]++;
+            }
+
+            // add frames since change to the string
+            framesSinceChangeString += framesSinceChange[i] + ",";
+        }
+
+        // done with the row
+        writer.WriteLine(framesSinceChangeString + curInputsString);
+    }
 }
 
 // change from minotype to 0-6
