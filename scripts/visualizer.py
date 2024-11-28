@@ -72,7 +72,7 @@ class TetrisVisualizer:
         self.MARGIN_CELLS = 4
         
         # Calculate window dimensions (added extra width for input display)
-        self.window_width = (self.BOARD_WIDTH + 2 * self.MARGIN_CELLS + 10) * self.CELL_SIZE  # Increased for input display
+        self.window_width = (self.BOARD_WIDTH + 2 * self.MARGIN_CELLS + 12) * self.CELL_SIZE  # Increased for input display
         self.window_height = (self.BOARD_HEIGHT + 2 * self.MARGIN_CELLS) * self.CELL_SIZE
         
         # Initialize pygame window
@@ -86,6 +86,7 @@ class TetrisVisualizer:
         self.next_pieces = []
         self.can_hold = True
         self.inputs = np.zeros(8)  # Store input states
+        self.input_change_frames = np.zeros(8)  # Store frames since last input changes
 
     def update_state(self, state_array):
         """Update the game state based on the 221-length input array"""
@@ -114,15 +115,18 @@ class TetrisVisualizer:
         # Next pieces (206-210)
         self.next_pieces = state_array[206:211]
         
-        # Input states (212-219)
-        self.inputs = state_array[212:220]
+        # Frames since last input change (211-218)
+        self.input_change_frames = state_array[211:219]
+
+        # Input states (219-226)
+        self.inputs = state_array[219:227]
 
     def draw_input_display(self):
         """Draw the input state display"""
         # Starting position for input display
         start_x = (self.MARGIN_CELLS + self.BOARD_WIDTH + 6) * self.CELL_SIZE
         start_y = self.MARGIN_CELLS + 2 * self.CELL_SIZE
-        box_size = self.CELL_SIZE * 1.5
+        box_size = self.CELL_SIZE * 2
         spacing = self.CELL_SIZE * 0.2
         
         # Define the layout of input boxes
@@ -142,8 +146,8 @@ class TetrisVisualizer:
             "L": 0,    # moveleft
             "R": 1,    # moveright
             "SD": 2,   # softdrop
-            "CCW": 3,  # counterclockwise
-            "CW": 4,   # clockwise
+            "CW": 3,   # clockwise
+            "CCW": 4,  # counterclockwise
             "180": 5,  # 180
             "HD": 6,   # harddrop
             "HLD": 7   # hold
@@ -173,6 +177,11 @@ class TetrisVisualizer:
                 text = font.render(label, True, (255, 0, 0))
                 text_rect = text.get_rect(center=(x + box_size/2, y + box_size/2))
                 self.screen.blit(text, text_rect)
+
+                # Draw frames since last change
+                text2 = font.render(str(self.input_change_frames[label_to_index[label]]), True, (255, 0, 0))
+                text_rect2 = text.get_rect(center=(x + box_size/2, y + 3*box_size/4))
+                self.screen.blit(text2, text_rect2)
 
     def draw_piece(self, piece_id, x, y, rotation, color):
         """Draw a tetris piece at the specified position"""
@@ -262,7 +271,7 @@ class TetrisVisualizer:
             self.update_state(state_array)
             self.draw_board()
 
-            # time.sleep(0.1)
+            time.sleep(0.1)
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -303,6 +312,10 @@ if __name__ == "__main__":
 
     # Read list of states from a file
     df = pd.read_csv("data/processed_replays/test2_0.csv", index_col=False)
+    print(len(df.iloc[0]))
+    print(df.iloc[0][200:])
+    print(df.iloc[10][211:219])
+    print(df.iloc[10][219:227])
 
     states = df.to_numpy()
     

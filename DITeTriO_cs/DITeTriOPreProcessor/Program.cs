@@ -57,6 +57,11 @@ using (StreamReader reader = new StreamReader(filepath))
             {
                 LogBoard(replay.Environments, writer);
                 LogInputs(replay.Environments, writer, lastInputs, framesSinceChange);
+                // copy the lastInputs
+                for (int j = 0; j < lastInputs.Length; j++)
+                {
+                    lastInputs[j] = replay.Environments[0].PressingKeys[j];
+                }
 
                 if (!replay.NextFrame())
                 {
@@ -138,7 +143,15 @@ void LogInputs(List<Environment> environments, StreamWriter writer, bool[] lastI
                 framesSinceChange[i] = 0;
             } else {
                 // key is the same
-                framesSinceChange[i]++;
+                // if pressed, decrease (go negative). If unpressed, increase (go positive)
+                if (env.PressingKeys[i])
+                {
+                    framesSinceChange[i]--;
+                }
+                else 
+                {
+                    framesSinceChange[i]++;
+                }
             }
 
             // add frames since change to the string
