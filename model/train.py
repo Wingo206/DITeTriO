@@ -34,7 +34,7 @@ output = 8
 leakySlope = 1e-2
 lr = 1e-3
 epochs = 20
-bs = 64
+bs = 1024
 
 device = (
         "cuda"
@@ -57,7 +57,7 @@ class board_model(nn.Module):
             nn.Flatten()
         )
     
-    def foward(self, x):
+    def forward(self, x):
         return self.seq1(x)
 
 class prob_model(nn.Module):
@@ -65,13 +65,13 @@ class prob_model(nn.Module):
         super(prob_model,self).__init__()
 
         self.seq1 = nn.Sequential(
-            nn.Linear(channel_3*H*W+21, hidden_layer_1),
+            nn.Linear(channel_3*H*W+18, hidden_layer_1),
             nn.Linear(hidden_layer_1, hidden_layer_2),
             nn.Linear(hidden_layer_2, output)
         )
 
-    def foward(self, x, new_data):
-        x = torch.cat(x, new_data)
+    def forward(self, x, new_data):
+        x = torch.cat((x, new_data),dim=1)
         return self.seq1(x)
     
 class combined_model(nn.Module):
@@ -81,7 +81,7 @@ class combined_model(nn.Module):
         self.board_model = board_model()
         self.prob_model = prob_model()
 
-    def foward(self, x, new_data):
+    def forward(self, x, new_data):
         x = self.board_model(x)
         return self.prob_model(x, new_data)
 
@@ -102,9 +102,9 @@ loss_fn = nn.MSELoss()
 
 class TetrDataset(Dataset):
     def __init__(self, df):
-        self.board = df.iloc[:,0:199]
-        self.other = df.iloc[:,200:220]
-        self.label = df.iloc[:,221:228]
+        self.board = df.iloc[:,:200]
+        self.other = df.iloc[:,200:219]
+        self.label = df.iloc[:,219:]
     
     def __len__(self):
         return len(self.label)
@@ -115,17 +115,21 @@ class TetrDataset(Dataset):
         other = self.other.iloc[idx]
         label = self.label.iloc[idx]
 
-        # print(board.head())
+        # print(other.head())
+        # print(label.head())
 
-        board_ten = torch.tensor(board.values, dtype=torch.int32)
-        other_ten = torch.tensor(other.values, dtype=torch.int32)
-        label_ten = torch.tensor(label.values, dtype=torch.int32)
+        board_ten = torch.tensor(board.values, dtype=torch.float32)
+        other_ten = torch.tensor(other.values, dtype=torch.float32)
+        label_ten = torch.tensor(label.values, dtype=torch.float32)
+
+        padded_other = F.pad(other_ten, (0, 181), "constant", 0)
+        padded_label = F.pad(label_ten, (0,192), "constant", 0)
         
         # print(board_ten)
         # print(other_ten)
         # print(label_ten)
 
-        return board_ten, other_ten, label_ten
+        return board_ten, padded_other, padded_label
 
 gulagland = 30
 data = pd.read_csv("data/processed_replays/test2_0.csv") #input csv here
@@ -135,34 +139,36 @@ data = data.dropna()
 data = data.sample(frac=1)
 data = data.reset_index(drop=True)
 data["can_hold"] = data["can_hold"].astype(int)
-data.iloc[:,0:199] = data.iloc[:,0:199].map(lambda x: 1 if x != 0 else x)
+data.iloc[:,0:200] = data.iloc[:,0:200].map(lambda x: 1 if x != 0 else x)
 shuffled = TetrDataset(data)
 
 
-def cust_coll(batch):
-    print(batch)
-    board = [item[0] for item in batch]
-    other = [item[1] for item in batch]
-    label = [item[2] for item in batch]
-    return board, other, label
+# def cust_coll(batch):
+#     # print(batch)
+#     board = [item[0] for item in batch]
+#     other = [item[1] for item in batch]
+#     label = [item[2] for item in batch]
+#     return board, other, label
 
 
 random.seed(1)
 train_data = shuffled[0:int(0.9*len(shuffled))]
 val_data = shuffled[int(0.9*len(shuffled)):]
 
-train_dataset = DataLoader(train_data, batch_size = bs,shuffle = True, collate_fn= cust_coll)
-val_dataset = DataLoader(val_data, batch_size = bs, shuffle = True, collate_fn= cust_coll)
+train_dataset = DataLoader(train_data, batch_size = bs,shuffle = True)
+val_dataset = DataLoader(val_data, batch_size = bs, shuffle = True)
 
 
 def train(device, model, optimizer, loss_fn, dataloader):
     model.train()
     total_loss = 0
     for batch in dataloader:
-        print(len(batch))
+        # print(len(batch))
         board, other, label = batch
-        print(board.shape)
-        board, other, label = board.to(device), other.to(device), label.to(device)
+        new_board = board.reshape(board.shape[0], 1, 10, 20)
+        new_other = other[:,:18]
+        new_label = label[:,:8]
+        board, other, label = new_board.to(device), new_other.to(device), new_label.to(device)
         optimizer.zero_grad()
         output = model(board, other)
         loss = loss_fn(output, label)
@@ -176,8 +182,12 @@ def val(device, model, loss_fn, dataloader):
     model.eval()
     total_loss = 0
     with torch.no_grad():
-        for board, other, label in dataloader:
-            board, other, label = board.to(device), other.to(device), label.to(device)
+        for batch in dataloader:
+            board, other, label = batch
+            new_board = board.reshape(board.shape[0], 1, 10, 20)
+            new_other = other[:,:18]
+            new_label = label[:,:8]
+            board, other, label = new_board.to(device), new_other.to(device), new_label.to(device)
             output = model(board, other)
             loss = loss_fn(output, label)
 
@@ -200,7 +210,7 @@ def main():
 
     for epoch in range(epochs):
         train_loss = train(device, model, optimizer, loss_fn, train_dataset)
-        val_loss = val(device, model, optimizer, loss_fn, val_dataset)
+        val_loss = val(device, model, loss_fn, val_dataset)
         print("Epoch %i Train Loss: %f", epoch, train_loss)
         # logging.info("Epoch %i Train Loss: %f", epoch, train_loss)
         # logging.info("Epoch %i Val Loss: %f", epoch, val_loss)
