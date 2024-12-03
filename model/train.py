@@ -10,10 +10,13 @@ import torch.distributed as dist
 import os
 import torch.nn.functional as F
 from torch.utils.data import Sampler
+from torch.utils.data import ConcatDataset
+import glob
+from torch.utils.data import Subset
 
 
-# from utilsNersc.logging import config_logging
-# from utilsNersc.distributed import init_workers
+from utilsNersc.logging import config_logging
+from utilsNersc.distributed import init_workers
 
 C, H, W = 1, 20, 10
 
@@ -33,8 +36,8 @@ output = 8
 
 leakySlope = 1e-2
 lr = 1e-3
-epochs = 20
-bs = 1024
+epochs = 100
+bs = 10000
 
 device = (
         "cuda"
@@ -132,16 +135,23 @@ class TetrDataset(Dataset):
         return board_ten, padded_other, padded_label
 
 gulagland = 30
-data = pd.read_csv("data/processed_replays/test2_0.csv") #input csv here
-data = data[:-gulagland]
-data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]] = data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]].shift(-1)
-data = data.dropna()
-data = data.sample(frac=1)
-data = data.reset_index(drop=True)
-data["can_hold"] = data["can_hold"].astype(int)
-data.iloc[:,0:200] = data.iloc[:,0:200].map(lambda x: 1 if x != 0 else x)
-shuffled = TetrDataset(data)
+datasets = []
 
+path = "data/processed_replays/*.csv"
+
+for csv in glob.glob(path):
+    data = pd.read_csv(csv) #input csv here
+    data = data[:-gulagland]
+    data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]] = data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]].shift(-1)
+    data = data.dropna()
+    data = data.sample(frac=1)
+    data = data.reset_index(drop=True)
+    data["can_hold"] = data["can_hold"].astype(int)
+    data.iloc[:,0:200] = data.iloc[:,0:200].applymap(lambda x: 1 if x != 0 else x)
+    temp = TetrDataset(data)
+    datasets.append(temp)
+
+shuffled = ConcatDataset(datasets)
 
 # def cust_coll(batch):
 #     # print(batch)
@@ -151,12 +161,7 @@ shuffled = TetrDataset(data)
 #     return board, other, label
 
 
-random.seed(1)
-train_data = shuffled[0:int(0.9*len(shuffled))]
-val_data = shuffled[int(0.9*len(shuffled)):]
 
-train_dataset = DataLoader(train_data, batch_size = bs,shuffle = True)
-val_dataset = DataLoader(val_data, batch_size = bs, shuffle = True)
 
 
 def train(device, model, optimizer, loss_fn, dataloader):
@@ -173,10 +178,16 @@ def train(device, model, optimizer, loss_fn, dataloader):
         output = model(board, other)
         loss = loss_fn(output, label)
         loss.backward()
+        avg_grad(model)
         optimizer.step()
 
         total_loss += loss.item()
     return total_loss/bs
+
+def avg_grad(model):
+    for parameter in model.parameters():
+        if type(parameter) is torch.Tensor:
+            dist.all_reduce(parameter.grad.data,op=dist.reduce_op.AVG)
 
 def val(device, model, loss_fn, dataloader):
     model.eval()
@@ -196,24 +207,31 @@ def val(device, model, loss_fn, dataloader):
 
 def main():
 
-    # rank, n_ranks = init_workers()
+    rank, n_ranks = init_workers()
 
-    # output_dir = "$SCRATCH/tetris/output"
-    # output_dir = os.path.expandvars(output_dir)
-    # os.makedirs(output_dir, exist_ok=True)
+    output_dir = "$SCRATCH/tetris/output"
+    output_dir = os.path.expandvars(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # log_file = (os.path.join(output_dir, 'out_%i.log' % rank)
-    #             if output_dir is not None else None)
-    # config_logging(verbose=True, log_file=log_file)
+    log_file = (os.path.join(output_dir, 'out_%i.log' % rank)
+                if output_dir is not None else None)
+    config_logging(verbose=True, log_file=log_file)
 
-    # logging.info('Initialized rank %i out of %i', rank, n_ranks)
+    logging.info('Initialized rank %i out of %i', rank, n_ranks)
+
+    shuffled_part = Subset(shuffled, range(int(rank/n_ranks)*len(shuffled),int(rank+1/n_ranks)*len(shuffled)))
+    train_data = Subset(shuffled_part, range(int(0.9*len(shuffled))))
+    val_data = Subset(shuffled_part, range(int(0.9*len(shuffled)), len(shuffled)))
+                    
+    train_dataset = DataLoader(train_data, batch_size = bs,shuffle = True)
+    val_dataset = DataLoader(val_data, batch_size = bs, shuffle = True)
 
     for epoch in range(epochs):
         train_loss = train(device, model, optimizer, loss_fn, train_dataset)
         val_loss = val(device, model, loss_fn, val_dataset)
-        print("Epoch %i Train Loss: %f", epoch, train_loss)
-        # logging.info("Epoch %i Train Loss: %f", epoch, train_loss)
-        # logging.info("Epoch %i Val Loss: %f", epoch, val_loss)
+        # print("Epoch %i Train Loss: %f", epoch, train_loss)
+        logging.info("Epoch %i Train Loss: %f", epoch, train_loss)
+        logging.info("Epoch %i Val Loss: %f", epoch, val_loss)
 
 if __name__ == "__main__":
     main()
