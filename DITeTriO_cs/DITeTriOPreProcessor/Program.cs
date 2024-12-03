@@ -8,12 +8,17 @@ using Environment = TetrEnvironment.Environment;
 using static TetrEnvironment.Constants.Tetromino;
 using System.Text;
 
-string rawFilepath = "../../data/raw_replays/";
-string procsessedFilepath = "../../data/processed_replays/";
+// input: "/raw/file filename /output/path player1 player2"
+// output: /output/path/player1/filename_p0_r0.csv
+string input = Console.ReadLine();
 
-string filename = "test2";
+string[] splitInput = input.Split(' ');
 
-string filepath = rawFilepath + filename + ".ttrm";
+string rawDir = splitInput[0];
+string filename = splitInput[1];
+string processedDir = splitInput[2];
+string player0 = splitInput[3];
+string player1 = splitInput[4];
 
 // header of the csv
 StringBuilder header = new StringBuilder();
@@ -28,7 +33,9 @@ header.Append("last_moveleft,last_moveright,last_softdrop,last_rotate_cw,last_ro
 header.Append("moveleft,moveright,softdrop,rotate_cw,rotate_ccw,rotate_180,harddrop,hold");
 
 string headerString = header.ToString();
-using (StreamReader reader = new StreamReader(filepath))
+
+// process the replay
+using (StreamReader reader = new StreamReader(rawDir + "/" + filename + ".ttrm"))
 {
 	string content = reader.ReadToEnd();
 	//parse json to IReplayData
@@ -42,25 +49,35 @@ using (StreamReader reader = new StreamReader(filepath))
     {
         Console.WriteLine("On replay " + (i+1) + " / " + replayData.GetGamesCount());
 
-        // set up the output file
-        string outFilepath = procsessedFilepath + filename + "_" + i + ".csv";
-        using (StreamWriter writer = new StreamWriter(outFilepath))
-        {
+        // set up the output files
+        string outFilepath0 = processedDir + "/" + player0 + "/" + filename + "_p0_r"+i+".csv";
+        string outFilepath1 = processedDir + "/" + player1 + "/" + filename + "_p1_r"+i+".csv";
+        StreamWriter[] writers = new StreamWriter[2];
+        writers[0] = new StreamWriter(outFilepath0);
+        writers[1] = new StreamWriter(outFilepath1);
+        try {
+
             // write the header
-            writer.WriteLine(headerString);
+            foreach (var writer in writers)
+            {
+                writer.WriteLine(headerString);
+            }
 
             // load the replay
             replay.LoadGame(i);
-            bool[] lastInputs = new bool[8];
-            int[] framesSinceChange = new int[8];
+            bool[,] lastInputs = new bool[2, 8];
+            int[,] framesSinceChange = new int[2, 8];
             while (true)
             {
-                LogBoard(replay.Environments, writer);
-                LogInputs(replay.Environments, writer, lastInputs, framesSinceChange);
+                LogBoard(replay.Environments, writers);
+                LogInputs(replay.Environments, writers, lastInputs, framesSinceChange);
                 // copy the lastInputs
-                for (int j = 0; j < lastInputs.Length; j++)
+                for (int playerIndex = 0; playerIndex < 2; playerIndex++)
                 {
-                    lastInputs[j] = replay.Environments[0].PressingKeys[j];
+                    for (int j = 0; j < lastInputs.GetLength(1); j++)
+                    {
+                        lastInputs[playerIndex, j] = replay.Environments[playerIndex].PressingKeys[j];
+                    }
                 }
 
                 if (!replay.NextFrame())
@@ -69,7 +86,15 @@ using (StreamReader reader = new StreamReader(filepath))
                 }
             }
         }
-        // stream writer ends when the block ends
+        finally
+        {
+            // close the streamwriters
+            foreach (var writer in writers)
+            {
+                writer?.Dispose();
+            }
+
+        }
 
         Console.WriteLine("Wrote file for game " + i);
 
@@ -77,11 +102,11 @@ using (StreamReader reader = new StreamReader(filepath))
 
 }
 
-void LogBoard(List<Environment> environments, StreamWriter writer)
+void LogBoard(List<Environment> environments, StreamWriter[] writers)
 {
     // for (int playerIndex = 0; playerIndex < environments.Count; playerIndex++)
     // for now, just log the first player
-    for (int playerIndex = 0; playerIndex < 1; playerIndex++)
+    for (int playerIndex = 0; playerIndex < 2; playerIndex++)
     {
         StringBuilder row = new StringBuilder();
         Environment env = environments[playerIndex];
@@ -115,13 +140,13 @@ void LogBoard(List<Environment> environments, StreamWriter writer)
         }
 
         // write to the csv
-        writer.Write(row.ToString());
+        writers[playerIndex].Write(row.ToString());
     }
 }
 
-void LogInputs(List<Environment> environments, StreamWriter writer, bool[] lastInputs, int[] framesSinceChange)
+void LogInputs(List<Environment> environments, StreamWriter[] writers, bool[,] lastInputs, int[,] framesSinceChange)
 {
-    for (int playerIndex = 0; playerIndex < 1; playerIndex++)
+    for (int playerIndex = 0; playerIndex < 2; playerIndex++)
     {
         Environment env = environments[playerIndex];
 
@@ -137,29 +162,29 @@ void LogInputs(List<Environment> environments, StreamWriter writer, bool[] lastI
             }
 
             // update the frames since change
-            if (env.PressingKeys[i] != lastInputs[i])
+            if (env.PressingKeys[i] != lastInputs[playerIndex, i])
             {
                 // this key has changed
-                framesSinceChange[i] = 0;
+                framesSinceChange[playerIndex, i] = 0;
             } else {
                 // key is the same
                 // if pressed, decrease (go negative). If unpressed, increase (go positive)
                 if (env.PressingKeys[i])
                 {
-                    framesSinceChange[i]--;
+                    framesSinceChange[playerIndex, i]--;
                 }
                 else 
                 {
-                    framesSinceChange[i]++;
+                    framesSinceChange[playerIndex, i]++;
                 }
             }
 
             // add frames since change to the string
-            framesSinceChangeString += framesSinceChange[i] + ",";
+            framesSinceChangeString += framesSinceChange[playerIndex, i] + ",";
         }
 
         // done with the row
-        writer.WriteLine(framesSinceChangeString + curInputsString);
+        writers[playerIndex].WriteLine(framesSinceChangeString + curInputsString);
     }
 }
 
