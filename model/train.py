@@ -1,3 +1,4 @@
+print("importing")
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,10 +14,12 @@ from torch.utils.data import Sampler
 from torch.utils.data import ConcatDataset
 import glob
 from torch.utils.data import Subset
+from tqdm import tqdm
 
 
 from utilsNersc.logging import config_logging
 from utilsNersc.distributed import init_workers
+print("done importing")
 
 C, H, W = 1, 20, 10
 
@@ -137,9 +140,11 @@ class TetrDataset(Dataset):
 gulagland = 30
 datasets = []
 
-path = "data/processed_replays/*.csv"
+print("Loading Dataset")
+path = "data/processed_replays/players/caboozled_pie/*.csv"
+files = glob.glob(path)
 
-for csv in glob.glob(path):
+for csv in tqdm(files, desc="Reading Files"):
     data = pd.read_csv(csv) #input csv here
     data = data[:-gulagland]
     data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]] = data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]].shift(-1)
@@ -152,6 +157,7 @@ for csv in glob.glob(path):
     datasets.append(temp)
 
 shuffled = ConcatDataset(datasets)
+print("Done Loading Dataset")
 
 # def cust_coll(batch):
 #     # print(batch)
