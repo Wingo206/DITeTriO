@@ -5,17 +5,19 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import pandas as pd
-import random
 import logging
 import torch.distributed as dist
 import os
 import torch.nn.functional as F
-from torch.utils.data import Sampler
 from torch.utils.data import ConcatDataset
 import glob
 from torch.utils.data import Subset
 from tqdm import tqdm
 
+import matplotlib.pyplot as plt
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import random_split
 
 from utilsNersc.logging import config_logging
 from utilsNersc.distributed import init_workers
@@ -92,6 +94,7 @@ class combined_model(nn.Module):
         return self.prob_model(x, new_data)
 
 def init_weights(model):
+    torch.manual_seed(1)
     if isinstance(model, nn.Conv2d):
         nn.init.kaiming_uniform_(model.weight)
         nn.init.zeros_(model.bias)
@@ -99,10 +102,7 @@ def init_weights(model):
         nn.init.kaiming_uniform_(model.weight)
         nn.init.zeros_(model.bias)
 
-model = combined_model().to(device)
-optimizer = optim.Adam(model.parameters(), lr)
-model.apply(init_weights)
-loss_fn = nn.MSELoss()
+
 
 #need to write a dataloader of some sort
 
@@ -188,7 +188,7 @@ def train(device, model, optimizer, loss_fn, dataloader):
         optimizer.step()
 
         total_loss += loss.item()
-    return total_loss/bs
+    return total_loss/len(dataloader.sampler)
 
 def avg_grad(model):
     for parameter in model.parameters():
@@ -209,11 +209,11 @@ def val(device, model, loss_fn, dataloader):
             loss = loss_fn(output, label)
 
             total_loss += loss.item()
-    return total_loss/bs
+    return total_loss/len(dataloader.sampler)
 
 def main():
 
-    rank, n_ranks = init_workers()
+    rank, n_ranks = init_workers("nccl")
 
     output_dir = "$SCRATCH/tetris/output"
     output_dir = os.path.expandvars(output_dir)
@@ -221,23 +221,58 @@ def main():
 
     log_file = (os.path.join(output_dir, 'out_%i.log' % rank)
                 if output_dir is not None else None)
-    config_logging(verbose=True, log_file=log_file)
+    config_logging(verbose=False, log_file=log_file)
 
     logging.info('Initialized rank %i out of %i', rank, n_ranks)
 
-    shuffled_part = Subset(shuffled, range(int(rank/n_ranks)*len(shuffled),int(rank+1/n_ranks)*len(shuffled)))
-    train_data = Subset(shuffled_part, range(int(0.9*len(shuffled))))
-    val_data = Subset(shuffled_part, range(int(0.9*len(shuffled)), len(shuffled)))
+    gen  = torch.Generator().manual_seed(1)
+    trainset, valset = random_split(shuffled, [0.9,0.1], generator=gen)
+    train_sampler = DistributedSampler(trainset, num_replicas=n_ranks, rank=rank, shuffle=True)
+    val_sampler = DistributedSampler(valset, num_replicas=n_ranks, rank=rank, shuffle=True)
                     
-    train_dataset = DataLoader(train_data, batch_size = bs,shuffle = True)
-    val_dataset = DataLoader(val_data, batch_size = bs, shuffle = True)
+    train_dataset = DataLoader(trainset, batch_size = int(bs/n_ranks), sampler=train_sampler)
+    val_dataset = DataLoader(valset, batch_size = int(bs/n_ranks), sampler=val_sampler)
+
+
+    model = combined_model().to(device)
+    optimizer = optim.Adam(model.parameters(), lr)
+    model.apply(init_weights)
+    loss_fn = nn.MSELoss().to(device)
+
+    train_loss_data = []
+    val_loss_data = []
 
     for epoch in range(epochs):
         train_loss = train(device, model, optimizer, loss_fn, train_dataset)
         val_loss = val(device, model, loss_fn, val_dataset)
-        # print("Epoch %i Train Loss: %f", epoch, train_loss)
-        logging.info("Epoch %i Train Loss: %f", epoch, train_loss)
-        logging.info("Epoch %i Val Loss: %f", epoch, val_loss)
+        logging.info("Epoch %i Rank %i Train Loss: %f", epoch, rank, train_loss)
+        logging.info("Epoch %i Rank %i Val Loss: %f", epoch, rank, val_loss)
+
+        losses = torch.tensor([train_loss, val_loss]).to(device)
+        dist.all_reduce(losses)
+
+
+        if rank == 0:
+            losses = losses.cpu()
+            train_loss_data.append(losses[0])
+            val_loss_data.append(losses[1])
+
+
+            plt.plot(range(len(train_loss_data)), train_loss_data, 'b-', label='Training Loss')
+            plt.plot(range(len(val_loss_data)), val_loss_data, 'r-', label='Validation Loss')
+            plt.yscale('log')
+            plt.xlabel('Epochs')
+            plt.ylabel('Loss')
+            plt.title('Training and Validation Loss')
+            plt.legend()
+            plt.grid(True)
+
+            plt.savefig("loss.png", dpi=500)
+
+            plt.clf()
+            torch.save(model.state_dict(), "model")
+
+
 
 if __name__ == "__main__":
     main()
