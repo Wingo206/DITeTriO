@@ -262,6 +262,7 @@ def main():
             plt.savefig("loss.png", dpi=500)
 
             plt.clf()
+            torch.save(model.state_dict(), "model")
 
 
 
