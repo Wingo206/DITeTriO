@@ -8,7 +8,7 @@ using Environment = TetrEnvironment.Environment;
 using static TetrEnvironment.Constants.Tetromino;
 using System.Text;
 
-// input: "/raw/file filename /output/path player1 player2"
+// input: "/raw/path filename /output/path player1 player2"
 // output: /output/path/player1/filename_p0_r0.csv
 string input = Console.ReadLine();
 

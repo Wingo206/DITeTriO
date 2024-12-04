@@ -1,0 +1,15 @@
+first batch 0-628 done
+
+361 - 1000 in progress
+
+
+end: 4597
+
+sbatch --export=START=600,END=1000 process_all.slurm submitted 33518638 done
+sbatch --export=START=1000,END=1500 process_all.slurm submitted 33518921
+sbatch --export=START=1500,END=2000 process_all.slurm submitted
+sbatch --export=START=2000,END=2500 process_all.slurm submitted
+sbatch --export=START=2500,END=3000 process_all.slurm submitted
+sbatch --export=START=3000,END=3500 process_all.slurm submitted
+sbatch --export=START=3500,END=4000 process_all.slurm submitted
+sbatch --export=START=4000,END=4597 process_all.slurm submitted
