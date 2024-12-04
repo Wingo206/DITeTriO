@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TetrEnvironment", "TetrioVi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DITeTriOPreProcessor", "DITeTriOPreProcessor\DITeTriOPreProcessor.csproj", "{6C3452BA-285D-4704-83FD-0E626E3ABAD8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TetrEnvLink", "TetrEnvLink\TetrEnvLink.csproj", "{260E0C15-9AC7-4130-B613-BA28D4AA4B30}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -34,6 +36,10 @@ Global
 		{6C3452BA-285D-4704-83FD-0E626E3ABAD8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C3452BA-285D-4704-83FD-0E626E3ABAD8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C3452BA-285D-4704-83FD-0E626E3ABAD8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{260E0C15-9AC7-4130-B613-BA28D4AA4B30}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{260E0C15-9AC7-4130-B613-BA28D4AA4B30}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{260E0C15-9AC7-4130-B613-BA28D4AA4B30}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{260E0C15-9AC7-4130-B613-BA28D4AA4B30}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{32270DC9-4560-43C4-8AEF-FA83C7320D68} = {8C13A003-FC4B-49FA-8803-2B757D6DF4AE}
