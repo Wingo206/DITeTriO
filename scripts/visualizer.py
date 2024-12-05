@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import pandas as pd
 import pygame
 import time
@@ -120,8 +121,11 @@ class TetrisVisualizer:
 
         # Input states (219-226)
         self.inputs = state_array[219:227]
+        print(self.inputs.shape)
 
     def draw_input_display(self):
+        # I'm hacky so I'm going to make input values 100-200 brightness for
+        # when the input is being pressed with a probability
         """Draw the input state display"""
         # Starting position for input display
         start_x = (self.MARGIN_CELLS + self.BOARD_WIDTH + 6) * self.CELL_SIZE
@@ -163,7 +167,18 @@ class TetrisVisualizer:
                 # Get input state if this is a monitored input
                 if label in label_to_index:
                     input_state = self.inputs[label_to_index[label]]
-                    bg_color = (255, 255, 255) if input_state else (0, 0, 0)
+                    # on or off
+                    if input_state == 1:
+                        bg_color = (255, 255, 255)
+                    elif input_state == 0:
+                        bg_color = (0, 0, 0)
+                    else:
+                        # 100 - 200
+                        gray_percent = (input_state - 100) / 100.0
+                        gray_percent = min(max(gray_percent, 0), 1)
+                        gray_percent = math.sqrt(gray_percent)  # scale to see it better
+                        gray = int(gray_percent * 255)
+                        bg_color = (gray, gray, gray)
                 else:
                     bg_color = (0, 0, 0)
                 
@@ -311,7 +326,8 @@ if __name__ == "__main__":
 
 
     # Read list of states from a file
-    df = pd.read_csv("data/processed_replays/test2_0.csv", index_col=False)
+    # df = pd.read_csv("data/processed_replays/test2_0.csv", index_col=False)
+    df = pd.read_csv("data/processed_replays/players/sodiumoverdose/6657e2e7cdcf03ad6260a6d8_p1_r0.csv", index_col=False)
     print(len(df.iloc[0]))
     print(df.iloc[0][200:])
     print(df.iloc[10][211:219])

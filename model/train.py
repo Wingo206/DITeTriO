@@ -1,4 +1,5 @@
 print("importing")
+from enum import unique
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,15 +15,18 @@ import glob
 from torch.utils.data import Subset
 from tqdm import tqdm
 import argparse
-from torchinfo import summary
 
 import matplotlib.pyplot as plt
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data import WeightedRandomSampler
+
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import random_split
 
 from utilsNersc.logging import config_logging
 from utilsNersc.distributed import init_workers
+from model.tetr_dataset import load_dataset
+from model.tetr_model import combined_model
 print("done importing")
 
 parser = argparse.ArgumentParser(description="Train DITeTriO model")
@@ -35,6 +39,7 @@ parser.add_argument("--conv_kernels", type=int, nargs="+", help="size of convolu
 parser.add_argument("--conv_padding", type=int, nargs="+", help="size of maxpooling kernels")
 parser.add_argument("--linears", type=int, nargs="+", help="number of nodes for each linear layer")
 parser.add_argument("--dropouts", type=float, nargs="+", help="dropout percentages for linear layers")
+parser.add_argument("--lr", type=float, default=1e-3, help="learning rate brog")
 
 args = parser.parse_args()
 # remove quotes from train data and output dir
@@ -63,7 +68,7 @@ if not args.dropouts:
 output = 8
 
 leakySlope = 1e-2
-lr = 1e-3
+lr = args.lr
 epochs = args.epochs
 bs = args.batch
 
@@ -74,61 +79,6 @@ device = (
         if torch.backends.mps.is_available()
         else "cpu")
 
-class board_model(nn.Module):
-    def __init__(self):
-        super(board_model,self).__init__()
-
-        layers = []
-        args.conv_channels.insert(0, 1)
-        for i in range(len(args.conv_kernels)):
-            k = args.conv_kernels[i]
-            layers.append(nn.Conv2d(args.conv_channels[i], args.conv_channels[i+1], (k, k), padding = args.conv_padding[i]))
-            layers.append(nn.LeakyReLU(negative_slope=leakySlope))
-
-        layers.append(nn.Flatten())
-
-        self.seq1 = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        return self.seq1(x)
-
-class prob_model(nn.Module):
-    def __init__(self, cnn_features_size):
-        super(prob_model,self).__init__()
-
-        args.linears.insert(0, cnn_features_size + 18)  # number of input nodes
-        args.linears.append(8)  # number of output nodes
-        layers = []
-        for i in range(len(args.linears) - 1):
-            layers.append(nn.Linear(args.linears[i], args.linears[i+1]))
-            layers.append(nn.LeakyReLU(negative_slope=leakySlope))
-
-            if i == len(args.dropouts):
-                continue
-            if args.dropouts[i] > 0:
-                layers.append(nn.Dropout(p=args.dropouts[i]))
-
-        self.seq1 = nn.Sequential(*layers)
-
-    def forward(self, x, new_data):
-        x = torch.cat((x, new_data),dim=1)
-        return self.seq1(x)
-    
-class combined_model(nn.Module):
-    def __init__(self):
-        super(combined_model,self).__init__()
-
-        self.board_model = board_model()
-        # run the board model once to see the output size
-        input_size = (1, 1, 10, 20)
-        dummy_input = torch.randn(input_size)
-        dummy_output = self.board_model(dummy_input)
-
-        self.prob_model = prob_model(dummy_output.shape[1])
-
-    def forward(self, x, new_data):
-        x = self.board_model(x)
-        return self.prob_model(x, new_data)
 
 def init_weights(model):
     torch.manual_seed(1)
@@ -140,71 +90,20 @@ def init_weights(model):
         nn.init.zeros_(model.bias)
 
 
+shuffled = load_dataset(args.train_data)
 
-#need to write a dataloader of some sort
 
-class TetrDataset(Dataset):
-    def __init__(self, df):
-        self.board = df.iloc[:,:200]
-        self.other = df.iloc[:,200:219]
-        self.label = df.iloc[:,219:]
-    
-    def __len__(self):
-        return len(self.label)
-    
-    def __getitem__(self, idx):
-        # print(idx)
-        board = self.board.iloc[idx]
-        other = self.other.iloc[idx]
-        label = self.label.iloc[idx]
-
-        # print(other.head())
-        # print(label.head())
-
-        board_ten = torch.tensor(board.values, dtype=torch.float32)
-        other_ten = torch.tensor(other.values, dtype=torch.float32)
-        label_ten = torch.tensor(label.values, dtype=torch.float32)
-
-        padded_other = F.pad(other_ten, (0, 181), "constant", 0)
-        padded_label = F.pad(label_ten, (0,192), "constant", 0)
-        
-        # print(board_ten)
-        # print(other_ten)
-        # print(label_ten)
-
-        return board_ten, padded_other, padded_label
-
-gulagland = 30
-datasets = []
-
-print("Loading Dataset")
-path = args.train_data
-files = glob.glob(path)
-
-for csv in tqdm(files, desc="Reading Files"):
-    data = pd.read_csv(csv) #input csv here
-    data = data[:-gulagland]
-    data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]] = data[["moveleft","moveright","softdrop","rotate_cw","rotate_ccw","rotate_180","harddrop","hold"]].shift(-1)
-    data = data.dropna()
-    data = data.sample(frac=1)
-    data = data.reset_index(drop=True)
-    data["can_hold"] = data["can_hold"].astype(int)
-    data.iloc[:,0:200] = data.iloc[:,0:200].applymap(lambda x: 1 if x != 0 else x)
-    temp = TetrDataset(data)
-    datasets.append(temp)
-
-shuffled = ConcatDataset(datasets)
-print("Done Loading Dataset")
 
 
 def train(device, model, optimizer, loss_fn, dataloader):
     model.train()
     total_loss = 0
+    total_samples = 0
     for batch in dataloader:
         # print(len(batch))
         board, other, label = batch
-        new_board = board.reshape(board.shape[0], 1, 10, 20)
-        new_other = other[:,:18]
+        new_board = board.reshape(board.shape[0], 1, 20, 10)
+        new_other = other[:,:19]
         new_label = label[:,:8]
         board, other, label = new_board.to(device), new_other.to(device), new_label.to(device)
         optimizer.zero_grad()
@@ -215,7 +114,9 @@ def train(device, model, optimizer, loss_fn, dataloader):
         optimizer.step()
 
         total_loss += loss.item()
-    return total_loss/len(dataloader.sampler)
+        total_samples += 1
+
+    return total_loss / total_samples
 
 def avg_grad(model):
     for parameter in model.parameters():
@@ -225,18 +126,20 @@ def avg_grad(model):
 def val(device, model, loss_fn, dataloader):
     model.eval()
     total_loss = 0
+    total_samples = 0
     with torch.no_grad():
         for batch in dataloader:
             board, other, label = batch
-            new_board = board.reshape(board.shape[0], 1, 10, 20)
-            new_other = other[:,:18]
+            new_board = board.reshape(board.shape[0], 1, 20, 10)
+            new_other = other[:,:19]
             new_label = label[:,:8]
             board, other, label = new_board.to(device), new_other.to(device), new_label.to(device)
             output = model(board, other)
             loss = loss_fn(output, label)
 
             total_loss += loss.item()
-    return total_loss/len(dataloader.sampler)
+            total_samples += 1 
+    return total_loss / total_samples
 
 def main():
 
@@ -256,6 +159,53 @@ def main():
 
     gen  = torch.Generator().manual_seed(1)
     trainset, valset = random_split(shuffled, [0.9,0.1], generator=gen)
+
+
+
+    # distributed sampling
+    # powers_of_two = torch.tensor([128, 64, 32, 16, 8, 4, 2, 1])
+    # label_codes = []
+    # for data in tqdm(trainset):
+    #     label_codes.append((data[2][:8] * powers_of_two).sum(dim=0) * 0)
+    # label_codes_tensor = torch.stack(label_codes).int()
+    # unique_labels, label_counts = torch.unique(label_codes_tensor, return_counts=True)
+    # all_labels = torch.Tensor([x for x in range(0, 255)])
+    # all_counts = torch.zeros(256).long()
+    # all_counts[unique_labels.int()] = label_counts
+
+    # # Calculate weights for WeightedRandomSampler
+    # label_weights = 1.0 / (all_counts.float() + 1e-6)  # Avoid division by zero
+    # weights = label_weights[label_codes_tensor]  # Assign weights based on label occurrence
+
+    # # Initialize the samplers
+    # weighted_sampler = WeightedRandomSampler(weights, num_samples=len(trainset), replacement=True)
+    # distributed_sampler = DistributedSampler(trainset, num_replicas=n_ranks, rank=rank, shuffle=True)
+
+#     class CombinedSampler:
+#         def __init__(self, dataset, distributed_sampler, weighted_sampler):
+#             self.dataset = dataset
+#             self.distributed_sampler = distributed_sampler
+#             self.weighted_sampler = weighted_sampler
+        
+#         def __iter__(self):
+#             # Get distributed indices for the current rank
+#             self.distributed_sampler.set_epoch(0)  # Ensure consistent epoch behavior
+#             distributed_indices = list(self.distributed_sampler)
+
+#             # Apply the weighted sampler to the distributed subset
+#             subset_weights = torch.tensor([self.weighted_sampler.weights[i] for i in distributed_indices])
+#             weighted_subset_sampler = WeightedRandomSampler(
+#                 subset_weights, num_samples=len(distributed_indices), replacement=True
+#             )
+            
+#             # Yield indices from the weighted subset sampler
+#             return iter([distributed_indices[i] for i in weighted_subset_sampler])
+        
+#         def __len__(self):
+#             return len(self.distributed_sampler)
+
+    # combined_sampler = CombinedSampler(trainset, distributed_sampler, weighted_sampler)
+
     train_sampler = DistributedSampler(trainset, num_replicas=n_ranks, rank=rank, shuffle=True)
     val_sampler = DistributedSampler(valset, num_replicas=n_ranks, rank=rank, shuffle=True)
                     
@@ -263,10 +213,11 @@ def main():
     val_dataset = DataLoader(valset, batch_size = int(bs/n_ranks), sampler=val_sampler)
 
 
-    model = combined_model().to(device)
+    model = combined_model(args).to(device)
     optimizer = optim.Adam(model.parameters(), lr)
     model.apply(init_weights)
     loss_fn = nn.MSELoss().to(device)
+    # loss_fn = nn.BCELoss().to(device)
 
     # log arguments
     logging.info(args)
@@ -283,11 +234,11 @@ def main():
     for epoch in range(epochs):
         train_loss = train(device, model, optimizer, loss_fn, train_dataset)
         val_loss = val(device, model, loss_fn, val_dataset)
-        logging.info("Epoch %i Rank %i Train Loss: %f", epoch, rank, train_loss)
-        logging.info("Epoch %i Rank %i Val Loss: %f", epoch, rank, val_loss)
+        # logging.info("Epoch %i Rank %i Train Loss: %f", epoch, rank, train_loss)
+        # logging.info("Epoch %i Rank %i Val Loss: %f", epoch, rank, val_loss)
 
         losses = torch.tensor([train_loss, val_loss]).to(device)
-        dist.all_reduce(losses)
+        dist.all_reduce(losses, op=dist.reduce_op.AVG)
 
 
         if rank == 0:
