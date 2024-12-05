@@ -6,7 +6,7 @@ import argparse
 
 # all files are in index, not all index are in files
 
-parser = argparse.ArgumentParser(description="potential function trajectory")
+parser = argparse.ArgumentParser(description="Process raw replays")
 parser.add_argument("--start", type=int, help="start index inclusive")
 parser.add_argument("--end", type=int, help="end index exclusive")
 

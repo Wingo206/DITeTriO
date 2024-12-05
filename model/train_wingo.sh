@@ -2,12 +2,13 @@
 #SBATCH -N 2
 #SBATCH -C gpu
 #SBATCH -G 8
-#SBATCH -q debug
+#SBATCH -q regular
 #SBATCH -J Tetris
 #SBATCH --mail-user=bhc31@scarletmail.rutgers.edu
 #SBATCH --mail-type=ALL
-#SBATCH -t 00:30:00
+#SBATCH -t 01:00:00
 #SBATCH -A m4431_g
+#SBATCH --output=/global/cfs/projectdirs/m4431/DITeTriO/model/slurm_out/
 
 
 #OpenMP settings:
