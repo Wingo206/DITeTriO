@@ -8,7 +8,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH -t 01:00:00
 #SBATCH -A m4431_g
-#SBATCH --output=/global/cfs/projectdirs/m4431/DITeTriO/model/slurm_out/
+#SBATCH --output=/global/cfs/projectdirs/m4431/DITeTriO/model/slurm_out/slurm-%j.out
 
 
 #OpenMP settings:
