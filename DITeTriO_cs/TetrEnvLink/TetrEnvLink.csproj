@@ -10,5 +10,6 @@
   <ItemGroup>
     <ProjectReference Include="..\TetrLoader\TetrLoader\TetrLoader.csproj" />
     <ProjectReference Include="..\TetrioVirtualEnvironment\TetrEnvironment\TetrEnvironment.csproj" />
+    <ProjectReference Include="..\DITeTriOPreProcessor\DITeTriOPreProcessor.csproj" />
   </ItemGroup>
 </Project>

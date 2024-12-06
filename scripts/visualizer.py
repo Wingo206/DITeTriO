@@ -121,7 +121,6 @@ class TetrisVisualizer:
 
         # Input states (219-226)
         self.inputs = state_array[219:227]
-        print(self.inputs.shape)
 
     def draw_input_display(self):
         # I'm hacky so I'm going to make input values 100-200 brightness for
@@ -326,14 +325,15 @@ if __name__ == "__main__":
 
 
     # Read list of states from a file
-    # df = pd.read_csv("data/processed_replays/test2_0.csv", index_col=False)
-    df = pd.read_csv("data/processed_replays/players/sodiumoverdose/6657e2e7cdcf03ad6260a6d8_p1_r0.csv", index_col=False)
+    df = pd.read_csv("data/processed_replays/test2_0.csv", index_col=False)
+    # df = pd.read_csv("data/processed_replays/players/sodiumoverdose/6657e2e7cdcf03ad6260a6d8_p1_r0.csv", index_col=False)
     print(len(df.iloc[0]))
     print(df.iloc[0][200:])
     print(df.iloc[10][211:219])
     print(df.iloc[10][219:227])
 
     states = df.to_numpy()
+    print(states[0][204:])
     
     # Create and run visualizer
     visualizer = TetrisVisualizer()
