@@ -26,15 +26,10 @@ device = (
         if torch.backends.mps.is_available()
         else "cpu")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate DITeTriO Model")
-    parser.add_argument("--data", help="path of data glob to use")
-    parser.add_argument("--model_dir", help="directory with model in it")
 
-    args = parser.parse_args()
-
+def load_model(model_dir):
     # get the information from the training log
-    with open(os.path.join(args.model_dir, "summary.txt")) as f:
+    with open(os.path.join(model_dir, "summary.txt")) as f:
         content = f.read()
         model_args_str = content.splitlines()[0]
 
@@ -52,7 +47,19 @@ if __name__ == "__main__":
         model_args = Namespace(**model_args_dict)
         print(model_args)
     model = combined_model(model_args).to(device)
-    model.load_state_dict(torch.load( os.path.join(args.model_dir, "model.pt") ))
+    model.load_state_dict(torch.load( os.path.join(model_dir, "model.pt") ))
+
+    return model
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Evaluate DITeTriO Model")
+    parser.add_argument("--data", help="path of data glob to use")
+    parser.add_argument("--model_dir", help="directory with model in it")
+
+    args = parser.parse_args()
+
+    model = load_model(args.model_dir)
 
     # get some data
     if not args.data:

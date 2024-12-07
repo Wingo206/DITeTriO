@@ -17,8 +17,8 @@ class Program
     static void Main(string[] args)
     {
         // listen to the pipe for instructions from python
-        string cmdPipeName = "/tmp/cmdPipe";
-        string envPipeName = "/tmp/envPipe";
+        string cmdPipeName = args[0] + "/cmdPipe";
+        string envPipeName = args[0] + "/envPipe";
 
         Console.WriteLine($"Connecting to the pipe at {cmdPipeName}");
         using (FileStream cmdPipeStream = new FileStream(cmdPipeName, FileMode.Open, FileAccess.Read))
@@ -54,10 +54,17 @@ class Program
                 ReplayLoader.ParseReplay(ref content, Util.IsMulti(ref content) ? ReplayKind.TTRM : ReplayKind.TTR);
             
             Replay replay = new Replay(replayData);
-            replay.LoadGame(0);
+            replay.LoadGame(3);
+            replay.JumpFrame(250);
+
             Console.WriteLine(replay);
 
             Environment env = replay.Environments[0];
+            Console.WriteLine(env.FrameInfo.CurrentFrame);
+            Console.WriteLine(env.FrameInfo._currentIndex);
+            Console.WriteLine(env.TotalFrame);
+
+            Console.WriteLine(replay.Environments[1].FrameInfo._currentIndex);
             printBoard(env);
 
             // hijack the _events readonly list extremely grossly
@@ -71,10 +78,16 @@ class Program
             // replace with bogus list 
             fieldInfo.SetValue(env, newEvents);
 
+            for (int k = 0; k < env.FrameInfo._currentIndex; k++)
+            {
+                newEvents.Add(oldEvents[k]);
+                Console.WriteLine(k);
+            }
+
             // start events
-            newEvents.Add(oldEvents[0]);
-            newEvents.Add(oldEvents[1]);
-            newEvents.Add(oldEvents[2]);
+            /* newEvents.Add(oldEvents[0]); */
+            /* newEvents.Add(oldEvents[1]); */
+            /* newEvents.Add(oldEvents[2]); */
 
             // start simulation loop
             List<Environment> envs = [env];

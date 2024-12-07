@@ -6,22 +6,24 @@ import pandas as pd
 import sys
 from io import StringIO
 from scripts.visualizer import TetrisVisualizer
+import argparse
 
-replay_filepath = "/Users/brandon/Documents/GitHub/DITeTriO/data/raw_replays/test2.ttrm"
 
-cmd_pipe_name = "/tmp/cmdPipe"
-env_pipe_name = "/tmp/envPipe"
 
 class TetrEnvClient:
-    def __init__(self, replay_filepath, hook_fn):
+    def __init__(self, pipedir, replay_filepath, hook_fn):
         """
         hook_fn: input board array, output list of 8 inputs
         """
         
         # Create the named pipe if it doesn't exist
+        cmd_pipe_name = os.path.join(pipedir, "cmdPipe")
+        env_pipe_name = os.path.join(pipedir, "envPipe")
         if not os.path.exists(cmd_pipe_name):
+            print("Making " + cmd_pipe_name)
             os.mkfifo(cmd_pipe_name)
         if not os.path.exists(env_pipe_name):
+            print("Making " + env_pipe_name)
             os.mkfifo(env_pipe_name)
 
         # Open the pipe for writing
@@ -56,6 +58,12 @@ class TetrEnvClient:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pipedir", help="directory to put the pipes in")
+    parser.add_argument("--replay", help="path of replay to load from")
+    args = parser.parse_args()
+
+    os.environ["SDL_AUDIODRIVER"] = "dsp"
     vis = TetrisVisualizer() 
 
     global testval
@@ -73,13 +81,7 @@ if __name__ == "__main__":
 
         time.sleep(0.2)
 
-        # out = None
-        # if testval:
-        #     out = [True, False, False, False, False, False, False, False]
-        # else:
-        #     out = [False, False, False, False, False, False, False, False]
-        # testval = not testval
         out = np.random.rand(8) > 0.5
         return out
 
-    TetrEnvClient(replay_filepath, test_hook)
+    TetrEnvClient(args.pipedir, args.replay, test_hook)

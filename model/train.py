@@ -1,6 +1,7 @@
 print("importing")
 from enum import unique
 import torch
+from torch.cuda import is_initialized
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -263,6 +264,12 @@ def main():
             logging.info("saving model")
             torch.save(model.state_dict(), os.path.join(output_dir, "model.pt"))
             logging.info("done saving model")
+
+    # cleanup
+    if dist.is_initialized():
+        dist.destroy_process_group()
+
+    
 
 
 
