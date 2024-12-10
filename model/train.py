@@ -1,25 +1,16 @@
 print("importing")
-from enum import unique
 import torch
 from torch.cuda import is_initialized
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
-import pandas as pd
 import logging
 import torch.distributed as dist
 import os
-import torch.nn.functional as F
-from torch.utils.data import ConcatDataset
-import glob
-from torch.utils.data import Subset
-from tqdm import tqdm
 import argparse
 
 import matplotlib.pyplot as plt
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import WeightedRandomSampler
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import random_split
@@ -27,7 +18,8 @@ from torch.utils.data import random_split
 from utilsNersc.logging import config_logging
 from utilsNersc.distributed import init_workers
 from model.tetr_dataset import load_dataset
-from model.tetr_model import combined_model
+from model.tetr_model import create_model
+from model.lstm_training import train_lstm, val_lstm
 print("done importing")
 
 parser = argparse.ArgumentParser(description="Train DITeTriO model")
@@ -41,6 +33,14 @@ parser.add_argument("--conv_padding", type=int, nargs="+", help="size of maxpool
 parser.add_argument("--linears", type=int, nargs="+", help="number of nodes for each linear layer")
 parser.add_argument("--dropouts", type=float, nargs="+", help="dropout percentages for linear layers")
 parser.add_argument("--lr", type=float, default=1e-3, help="learning rate brog")
+parser.add_argument("--remove_last_frame", type=bool, default=False, help="Remove last frame inputs")
+parser.add_argument("--lstm", type=bool, default=False, help="Use lstm model")
+parser.add_argument("--seq_len", type=int, default=100, help="lstm sequence length for dataset")
+parser.add_argument("--lstm_layers", type=int, default=1, help="lstm hidden layers")
+parser.add_argument("--lstm_hidden_size", type=int, default=100, help="nodes in lstm hidden layers")
+parser.add_argument("--lstm_dropout", type=float, default=0, help="dropout for lstm hidden nodes")
+parser.add_argument("--sched_samp", type=bool, default=False, help="Enable scheduled sampling")
+parser.add_argument("--ramp_epochs", type=int, default=False, help="amount of epochs to ramp up scheduled sampling")
 
 args = parser.parse_args()
 # remove quotes from train data and output dir
@@ -91,9 +91,7 @@ def init_weights(model):
         nn.init.zeros_(model.bias)
 
 
-shuffled = load_dataset(args.train_data)
-
-
+shuffled = load_dataset(args)
 
 
 def train(device, model, optimizer, loss_fn, dataloader):
@@ -122,7 +120,7 @@ def train(device, model, optimizer, loss_fn, dataloader):
 def avg_grad(model):
     for parameter in model.parameters():
         if type(parameter) is torch.Tensor:
-            dist.all_reduce(parameter.grad.data,op=dist.reduce_op.AVG)
+            dist.all_reduce(parameter.grad.data,op=dist.ReduceOp.AVG)
 
 def val(device, model, loss_fn, dataloader):
     model.eval()
@@ -161,52 +159,6 @@ def main():
     gen  = torch.Generator().manual_seed(1)
     trainset, valset = random_split(shuffled, [0.9,0.1], generator=gen)
 
-
-
-    # distributed sampling
-    # powers_of_two = torch.tensor([128, 64, 32, 16, 8, 4, 2, 1])
-    # label_codes = []
-    # for data in tqdm(trainset):
-    #     label_codes.append((data[2][:8] * powers_of_two).sum(dim=0) * 0)
-    # label_codes_tensor = torch.stack(label_codes).int()
-    # unique_labels, label_counts = torch.unique(label_codes_tensor, return_counts=True)
-    # all_labels = torch.Tensor([x for x in range(0, 255)])
-    # all_counts = torch.zeros(256).long()
-    # all_counts[unique_labels.int()] = label_counts
-
-    # # Calculate weights for WeightedRandomSampler
-    # label_weights = 1.0 / (all_counts.float() + 1e-6)  # Avoid division by zero
-    # weights = label_weights[label_codes_tensor]  # Assign weights based on label occurrence
-
-    # # Initialize the samplers
-    # weighted_sampler = WeightedRandomSampler(weights, num_samples=len(trainset), replacement=True)
-    # distributed_sampler = DistributedSampler(trainset, num_replicas=n_ranks, rank=rank, shuffle=True)
-
-#     class CombinedSampler:
-#         def __init__(self, dataset, distributed_sampler, weighted_sampler):
-#             self.dataset = dataset
-#             self.distributed_sampler = distributed_sampler
-#             self.weighted_sampler = weighted_sampler
-        
-#         def __iter__(self):
-#             # Get distributed indices for the current rank
-#             self.distributed_sampler.set_epoch(0)  # Ensure consistent epoch behavior
-#             distributed_indices = list(self.distributed_sampler)
-
-#             # Apply the weighted sampler to the distributed subset
-#             subset_weights = torch.tensor([self.weighted_sampler.weights[i] for i in distributed_indices])
-#             weighted_subset_sampler = WeightedRandomSampler(
-#                 subset_weights, num_samples=len(distributed_indices), replacement=True
-#             )
-            
-#             # Yield indices from the weighted subset sampler
-#             return iter([distributed_indices[i] for i in weighted_subset_sampler])
-        
-#         def __len__(self):
-#             return len(self.distributed_sampler)
-
-    # combined_sampler = CombinedSampler(trainset, distributed_sampler, weighted_sampler)
-
     train_sampler = DistributedSampler(trainset, num_replicas=n_ranks, rank=rank, shuffle=True)
     val_sampler = DistributedSampler(valset, num_replicas=n_ranks, rank=rank, shuffle=True)
                     
@@ -214,11 +166,11 @@ def main():
     val_dataset = DataLoader(valset, batch_size = int(bs/n_ranks), sampler=val_sampler)
 
 
-    model = combined_model(args).to(device)
+    model = create_model(args).to(device)
     optimizer = optim.Adam(model.parameters(), lr)
     model.apply(init_weights)
-    loss_fn = nn.MSELoss().to(device)
-    # loss_fn = nn.BCELoss().to(device)
+    # loss_fn = nn.MSELoss().to(device)
+    loss_fn = nn.BCELoss().to(device)
 
     # log arguments
     logging.info(args)
@@ -233,13 +185,18 @@ def main():
     val_loss_data = []
 
     for epoch in range(epochs):
-        train_loss = train(device, model, optimizer, loss_fn, train_dataset)
-        val_loss = val(device, model, loss_fn, val_dataset)
+        if not args.lstm:
+            train_loss = train(device, model, optimizer, loss_fn, train_dataset)
+            val_loss = val(device, model, loss_fn, val_dataset)
+        else:
+            train_loss = train_lstm(device, model, optimizer, loss_fn, train_dataset, epoch)
+            val_loss = val_lstm(device, model, loss_fn, val_dataset, epoch)
+
         # logging.info("Epoch %i Rank %i Train Loss: %f", epoch, rank, train_loss)
         # logging.info("Epoch %i Rank %i Val Loss: %f", epoch, rank, val_loss)
 
         losses = torch.tensor([train_loss, val_loss]).to(device)
-        dist.all_reduce(losses, op=dist.reduce_op.AVG)
+        dist.all_reduce(losses, op=dist.ReduceOp.AVG)
 
 
         if rank == 0:

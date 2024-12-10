@@ -20,6 +20,10 @@ class Program
         string cmdPipeName = args[0] + "/cmdPipe";
         string envPipeName = args[0] + "/envPipe";
 
+        // start frame and game
+        int startGame = Int32.Parse(args[1]);
+        int startFrame = Int32.Parse(args[2]);
+
         Console.WriteLine($"Connecting to the pipe at {cmdPipeName}");
         using (FileStream cmdPipeStream = new FileStream(cmdPipeName, FileMode.Open, FileAccess.Read))
         using (StreamReader cmdReader = new StreamReader(cmdPipeStream))
@@ -31,7 +35,7 @@ class Program
                 Console.WriteLine("Connected to both pipes!");
                 envWriter.AutoFlush = true;
 
-                RunGame(cmdReader, envWriter);
+                RunGame(cmdReader, envWriter, startGame, startFrame);
                 // string cmd = cmdReader.ReadLine();
                 // Console.WriteLine(cmd);
                 // string information = "Hello from C#";
@@ -43,7 +47,7 @@ class Program
         }
     }
 
-    static void RunGame(StreamReader cmdReader, StreamWriter envWriter)
+    static void RunGame(StreamReader cmdReader, StreamWriter envWriter, int startGame, int startFrame)
     {
         string replayFilepath = cmdReader.ReadLine();
         using (StreamReader reader = new StreamReader(replayFilepath))
@@ -54,8 +58,8 @@ class Program
                 ReplayLoader.ParseReplay(ref content, Util.IsMulti(ref content) ? ReplayKind.TTRM : ReplayKind.TTR);
             
             Replay replay = new Replay(replayData);
-            replay.LoadGame(3);
-            replay.JumpFrame(250);
+            replay.LoadGame(startGame);
+            replay.JumpFrame(startFrame);
 
             Console.WriteLine(replay);
 
